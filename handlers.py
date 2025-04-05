@@ -1,7 +1,13 @@
 import logging
 from datetime import datetime
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import ContextTypes
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import (
+    ContextTypes,
+    CommandHandler,
+    MessageHandler,
+    ConversationHandler,
+    filters,
+)
 from database import insert_transaction
 
 logger = logging.getLogger(__name__)
@@ -215,3 +221,31 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     )
     context.user_data["last_prompt_message_id"] = sent_message.message_id
     return CHOOSING
+
+
+conv_handler = ConversationHandler(
+    entry_points=[CommandHandler("start", start)],
+    states={
+        CHOOSING: [
+            MessageHandler(filters.Regex("^Відміна$"), cancel),
+            MessageHandler(filters.Regex("^Додати транзакцію$"), add_transaction),
+        ],
+        DESCRIPTION: [
+            MessageHandler(filters.Regex("^Відміна$"), cancel),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, description_handler),
+        ],
+        CATEGORY: [
+            MessageHandler(filters.Regex("^Відміна$"), cancel),
+            MessageHandler(filters.Regex("^(продукти|розваги)$"), category_handler),
+        ],
+        TYPE: [
+            MessageHandler(filters.Regex("^Відміна$"), cancel),
+            MessageHandler(filters.Regex("^(витрати|надходження)$"), type_handler),
+        ],
+        AMOUNT: [
+            MessageHandler(filters.Regex("^Відміна$"), cancel),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, amount_handler),
+        ],
+    },
+    fallbacks=[CommandHandler("cancel", cancel)],
+)
