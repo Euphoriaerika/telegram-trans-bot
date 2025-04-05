@@ -4,7 +4,7 @@ from config import MONGO_URI
 from typing import Tuple
 
 
-client = MongoClient(MONGO_URI, server_api=ServerApi("1"))
+client = MongoClient(MONGO_URI, server_api=ServerApi("1"), tls=True)
 db = client.transactionDB
 collection = db.transactions
 
