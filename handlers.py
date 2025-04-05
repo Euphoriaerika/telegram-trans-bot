@@ -13,7 +13,25 @@ from database import insert_transaction
 logger = logging.getLogger(__name__)
 
 # Визначення станів розмови
-CHOOSING, DESCRIPTION, CATEGORY, TYPE, AMOUNT = range(5)
+CHOOSING, DESCRIPTION, TYPE, CATEGORY, AMOUNT = range(5)
+
+# Словник для маппінгу
+BUTTON_MAPPING = {
+    "📉 Витрати": "витрати",
+    "📈 Надходження": "надходження",
+    "🚫 Відміна": "відміна",
+    "💵 Заробітна платня/Пенсія": "заробітна платня/пенсія",
+    "💰 Інше": "інше",
+    "📦 Продукти": "продукти",
+    "🎉 Розваги": "розваги",
+    "🚕 Транспорт": "транспорт",
+    "👚 Одяг": "одяг",
+    "🏠 Для дому": "дім та побут",
+    "💊 Здоров'я": "медичні послуги",
+    "📚 Освіта": "освіта",
+    "✈️ Подорожі": "подорожі",
+    "💡 Комуналка": "комунальні послуги",
+}
 
 
 async def delete_last_prompt(
@@ -35,7 +53,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     sent_message = await update.message.reply_text(
         "Вітаю! Оберіть дію:",
         reply_markup=ReplyKeyboardMarkup(
-            [["Додати транзакцію"]], one_time_keyboard=True, resize_keyboard=True
+            [["➕ Додати транзакцію"]], one_time_keyboard=True, resize_keyboard=True
         ),
     )
     context.user_data["last_prompt_message_id"] = sent_message.message_id
@@ -55,7 +73,7 @@ async def add_transaction(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     sent_message = await update.message.reply_text(
         "Введіть опис транзакції:",
         reply_markup=ReplyKeyboardMarkup(
-            [["Відміна"]], one_time_keyboard=True, resize_keyboard=True
+            [["🚫 Відміна"]], one_time_keyboard=True, resize_keyboard=True
         ),
     )
     context.user_data["last_prompt_message_id"] = sent_message.message_id
@@ -76,8 +94,46 @@ async def description_handler(
         logger.error(f"Не вдалося видалити повідомлення користувача: {e}")
     await delete_last_prompt(update, context)
 
-    # Показуємо клавіатуру з категоріями
-    reply_keyboard = [["продукти", "розваги"], ["Відміна"]]
+    # Показуємо клавіатуру з типом транзакції
+    sent_message = await update.message.reply_text(
+        "Оберіть тип транзакції:",
+        reply_markup=ReplyKeyboardMarkup(
+            [["📉 Витрати", "📈 Надходження"], ["🚫 Відміна"]],
+            one_time_keyboard=True,
+            resize_keyboard=True,
+        ),
+    )
+    context.user_data["last_prompt_message_id"] = sent_message.message_id
+    return TYPE
+
+
+# Обробка типу транзакції
+async def type_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Зберігаємо введений тип
+    selected_type = update.message.text
+    context.user_data["type"] = BUTTON_MAPPING[selected_type]
+
+    # Видаляємо попереднє повідомлення
+    try:
+        await update.message.delete()
+    except Exception as e:
+        logger.error(f"Не вдалося видалити повідомлення користувача: {e}")
+    await delete_last_prompt(update, context)
+
+    # Показуємо клавіатуру з категоріями транзакції
+    if selected_type == "📈 Надходження":
+        reply_keyboard = [["💵 Заробітна платня/Пенсія", "💰 Інше"], ["🚫 Відміна"]]
+    elif selected_type == "📉 Витрати":
+        reply_keyboard = [
+            ["📦 Продукти", "🎉 Розваги", "🚕 Транспорт"],
+            ["👚 Одяг", "🏠 Для дому", "💊 Здоров'я"],
+            ["📚 Освіта", "✈️ Подорожі", "💡 Комуналка"],
+            ["🚫 Відміна"],
+        ]
+    else:
+        await update.message.reply_text("Невірний вибір типу транзакції.")
+        return ConversationHandler.END
+
     sent_message = await update.message.reply_text(
         "Оберіть категорію транзакції:",
         reply_markup=ReplyKeyboardMarkup(
@@ -88,34 +144,10 @@ async def description_handler(
     return CATEGORY
 
 
-# Обробка категорії транзакції
-async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # Зберігаємо введену категорію
-    context.user_data["category"] = update.message.text
-
-    # Видаляємо попереднє повідомлення
-    try:
-        await update.message.delete()
-    except Exception as e:
-        logger.error(f"Не вдалося видалити повідомлення користувача: {e}")
-    await delete_last_prompt(update, context)
-
-    # Показуємо клавіатуру з типом транзакції
-    reply_keyboard = [["витрати", "надходження"], ["Відміна"]]
-    sent_message = await update.message.reply_text(
-        "Оберіть тип транзакції:",
-        reply_markup=ReplyKeyboardMarkup(
-            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
-        ),
-    )
-    context.user_data["last_prompt_message_id"] = sent_message.message_id
-    return TYPE
-
-
 # Обробка типу транзакції
-async def type_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Зберігаємо введений тип
-    context.user_data["type"] = update.message.text
+    context.user_data["category"] = BUTTON_MAPPING[update.message.text]
 
     # Видаляємо попереднє повідомлення
     try:
@@ -128,7 +160,7 @@ async def type_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     sent_message = await update.message.reply_text(
         "Введіть суму транзакції (числове значення):",
         reply_markup=ReplyKeyboardMarkup(
-            [["Відміна"]], one_time_keyboard=True, resize_keyboard=True
+            [["🚫 Відміна"]], one_time_keyboard=True, resize_keyboard=True
         ),
     )
     context.user_data["last_prompt_message_id"] = sent_message.message_id
@@ -191,7 +223,7 @@ async def amount_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     context.user_data["last_prompt_message_id"] = sent_message.message_id
 
     # Відправляємо меню для подальших дій
-    reply_keyboard = [["Додати транзакцію"]]
+    reply_keyboard = [["➕ Додати транзакцію"]]
     sent_message = await update.message.reply_text(
         "Вітаю! Оберіть дію:",
         reply_markup=ReplyKeyboardMarkup(
@@ -212,7 +244,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await delete_last_prompt(update, context)
 
     # Потім надсилаємо меню, як у /start
-    reply_keyboard = [["Додати транзакцію"]]
+    reply_keyboard = [["➕ Додати транзакцію"]]
     sent_message = await update.message.reply_text(
         "Вітаю! Оберіть дію:",
         reply_markup=ReplyKeyboardMarkup(
@@ -227,23 +259,30 @@ conv_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],
     states={
         CHOOSING: [
-            MessageHandler(filters.Regex("^Відміна$"), cancel),
-            MessageHandler(filters.Regex("^Додати транзакцію$"), add_transaction),
+            MessageHandler(filters.Regex("^🚫 Відміна$"), cancel),
+            MessageHandler(filters.Regex("^➕ Додати транзакцію$"), add_transaction),
         ],
         DESCRIPTION: [
-            MessageHandler(filters.Regex("^Відміна$"), cancel),
+            MessageHandler(filters.Regex("^🚫 Відміна$"), cancel),
             MessageHandler(filters.TEXT & ~filters.COMMAND, description_handler),
         ],
-        CATEGORY: [
-            MessageHandler(filters.Regex("^Відміна$"), cancel),
-            MessageHandler(filters.Regex("^(продукти|розваги)$"), category_handler),
-        ],
         TYPE: [
-            MessageHandler(filters.Regex("^Відміна$"), cancel),
-            MessageHandler(filters.Regex("^(витрати|надходження)$"), type_handler),
+            MessageHandler(filters.Regex("^🚫 Відміна$"), cancel),
+            MessageHandler(
+                filters.Regex("^(📉 Витрати|📈 Надходження)$"), type_handler
+            ),
+        ],
+        CATEGORY: [
+            MessageHandler(filters.Regex("^🚫 Відміна$"), cancel),
+            MessageHandler(
+                filters.Regex(
+                    "^(💵 Заробітна платня/Пенсія|💰 Інше|📦 Продукти|🎉 Розваги|🚕 Транспорт|👚 Одяг|🏠 Для дому|💊 Здоров'я|📚 Освіта|✈️ Подорожі|💡 Комуналка)$"
+                ),
+                category_handler,
+            ),
         ],
         AMOUNT: [
-            MessageHandler(filters.Regex("^Відміна$"), cancel),
+            MessageHandler(filters.Regex("^🚫 Відміна$"), cancel),
             MessageHandler(filters.TEXT & ~filters.COMMAND, amount_handler),
         ],
     },
